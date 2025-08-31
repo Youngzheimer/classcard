@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "ClassCard 데이터 추출 도구",
+  "version": "1.0",
+  "description": "ClassCard 사이트에서 단어 데이터를 추출하고 저장합니다",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.classcard.net/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.classcard.net/set/*",
+        "https://www.classcard.net/ClassTest/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  }
+}

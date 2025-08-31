@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ClassCard 단어 추출 도구</title>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 350px;
+      padding: 15px;
+    }
+    
+    h2 {
+      color: #4285f4;
+      margin-top: 0;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .info {
+      background-color: #f8f9fa;
+      padding: 10px;
+      border-radius: 5px;
+      border-left: 4px solid #4285f4;
+    }
+    
+    input, button {
+      padding: 8px;
+    }
+    
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    button:hover {
+      background-color: #3367d6;
+    }
+    
+    .data-display {
+      margin-top: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+      max-height: 250px;
+      overflow-y: auto;
+      background-color: #f9f9f9;
+    }
+    
+    .word-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .word-item {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .word-item:last-child {
+      border-bottom: none;
+    }
+    
+    .word {
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .meaning {
+      color: #666;
+    }
+    
+    .status {
+      margin-top: 10px;
+      font-style: italic;
+      color: #666;
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn-export {
+      background-color: #34A853;
+    }
+    
+    .btn-export:hover {
+      background-color: #2d9249;
+    }
+  </style>
+</head>
+<body>
+  <h2>ClassCard 단어 추출 도구</h2>
+  
+  <div class="container">
+    <div class="info">
+      <p>ClassCard 단어장 페이지에서 자동으로 단어를 추출합니다. <br>
+      <strong>사용 방법:</strong> ClassCard 단어장 페이지(<code>https://www.classcard.net/set/*</code>)를 방문하세요.</p>
+    </div>
+    
+    <div class="status" id="status">
+      아직 추출된 단어가 없습니다.
+    </div>
+    
+    <div class="data-display">
+      <h3>추출된 단어</h3>
+      <div id="word-count"></div>
+      <ul class="word-list" id="word-list">
+        <li class="word-item">단어를 추출하려면 ClassCard 단어장 페이지를 방문하세요.</li>
+      </ul>
+    </div>
+    
+    <div class="btn-group">
+      <button id="clear-data">데이터 지우기</button>
+      <button id="export-csv" class="btn-export">CSV로 내보내기</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
