@@ -4,45 +4,32 @@
 
 // ClassCard 사이트의 URL 패턴을 정의합니다
 const DATA_COLLECTION_URL_PATTERN = "classcard.net/set/";
-const DATA_USAGE_URL_PATTERN = "example.com/use-data"; // 이 부분은 필요에 따라 수정하세요
-const TEST_URL_PATTERN = "classcard.net/ClassTest/";
+const DATA_USAGE_URL_PATTERN = "classcard.net/ClassTest/"; // 시험 페이지 인식
 
 // 탭이 업데이트될 때마다 URL을 체크합니다
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
-    
-    // ClassCard 단어장 URL인 경우
     if (tab.url.includes(DATA_COLLECTION_URL_PATTERN)) {
       console.log("ClassCard 단어장 페이지 감지됨:", tab.url);
-      chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['collector.js']
-      });
-    }
-    
-    // ClassCard 테스트 URL인 경우
-    else if (tab.url.includes(TEST_URL_PATTERN)) {
-      console.log("ClassCard 테스트 페이지 감지됨:", tab.url);
-      
-      // 테스트 페이지가 완전히 로드된 후 스크립트 실행 (지연 시간 최소화)
-      setTimeout(() => {
-        chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['test_helper.js']
-        });
-      }, 500);
-    }
-    
-    // 데이터 사용 URL인 경우
-    else if (tab.url.includes(DATA_USAGE_URL_PATTERN)) {
-      console.log("데이터 사용 페이지 감지됨:", tab.url);
-      chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['user.js']
-      });
+      chrome.scripting.executeScript({ target: { tabId }, files: ['collector.js'] });
+    } else if (tab.url.includes(DATA_USAGE_URL_PATTERN)) {
+      console.log("ClassCard 시험 페이지 감지됨:", tab.url);
+      chrome.scripting.executeScript({ target: { tabId }, files: ['classtest.js'] });
     }
   }
 });
+
+// SPA 네비게이션 대응 (history.pushState 등)
+chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+  const url = details.url || '';
+  if (url.includes(DATA_COLLECTION_URL_PATTERN)) {
+    console.log('SPA 이동 감지 - 단어장 페이지:', url);
+    chrome.scripting.executeScript({ target: { tabId: details.tabId }, files: ['collector.js'] });
+  } else if (url.includes(DATA_USAGE_URL_PATTERN)) {
+    console.log('SPA 이동 감지 - 시험 페이지:', url);
+    chrome.scripting.executeScript({ target: { tabId: details.tabId }, files: ['classtest.js'] });
+  }
+}, { url: [{ hostEquals: 'www.classcard.net' }] });
 
 // 콘텐츠 스크립트로부터 메시지 수신
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

@@ -55,17 +55,40 @@ function collectData() {
   return collectedData;
 }
 
-// 데이터 수집 및 저장
+// 데이터 수집 및 저장 (동적 로딩 대비 재시도)
 (function() {
-  const data = collectData();
-  
-  // 데이터를 백그라운드 스크립트로 전송하여 저장
-  chrome.runtime.sendMessage({
-    action: "saveData",
-    data: data
-  }, (response) => {
-    if (response && response.status === "success") {
-      console.log('데이터가 성공적으로 저장되었습니다');
+  const MAX_TRIES = 20; // 최대 20회 재시도 (~6초)
+  const INTERVAL_MS = 300;
+  let tries = 0;
+
+  const tryCollect = () => {
+    tries += 1;
+    const data = collectData();
+
+    if (data && Array.isArray(data.words) && data.words.length > 0) {
+      // 데이터를 백그라운드 스크립트로 전송하여 저장
+      chrome.runtime.sendMessage({ action: "saveData", data }, (response) => {
+        if (response && response.status === "success") {
+          console.log(`단어 ${data.words.length}개 저장 완료`);
+          // 선택적: 사용자에게 알림
+          const notification = document.createElement('div');
+          notification.textContent = `${data.words.length}개의 단어가 수집되었습니다!`;
+          notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: green; color: white; padding: 10px; border-radius: 5px; z-index: 10000;';
+          document.body.appendChild(notification);
+          setTimeout(() => notification.remove(), 2500);
+        }
+      });
+    } else if (tries < MAX_TRIES) {
+      // DOM 로딩이 늦는 경우 재시도
+      setTimeout(tryCollect, INTERVAL_MS);
+    } else {
+      console.log('단어 세트를 찾지 못해 수집을 종료합니다.');
     }
-  });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryCollect);
+  } else {
+    tryCollect();
+  }
 })();

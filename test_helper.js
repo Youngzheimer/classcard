@@ -1,47 +1,7 @@
 // test_helper.js
-// ClassCard 테스트 페이지에서 정답을 표시하는 스크립트 (성능 최적화 버전)
+// ClassCard 테스트 페이지에서 정답을 표시하는 스크립트
 
-// 디버깅 레벨 설정 (0: 끔, 1: 기본, 2: 상세)
-const DEBUG_LEVEL = 0;
-
-// 디버깅 로그 출력 함수
-function debugLog(message, level = 1) {
-  if (DEBUG_LEVEL >= level) {
-    console.log(message);
-  }
-}
-
-debugLog('ClassCard 테스트 도우미 실행 중...');
-
-// 스타일시트 추가 (한 번만 실행)
-function addStyles() {
-  // 이미 스타일이 추가되었는지 확인
-  if (document.getElementById('cc-answer-styles')) return;
-  
-  const styleElement = document.createElement('style');
-  styleElement.id = 'cc-answer-styles';
-  styleElement.textContent = `
-    .cc-correct-answer {
-      background-color: #e6f7e6 !important;
-      border: 2px solid #28a745 !important;
-      position: relative;
-    }
-    
-    .cc-correct-answer::after {
-      content: "✓";
-      position: absolute;
-      right: 10px;
-      top: 10px;
-      color: #28a745;
-      font-weight: bold;
-      font-size: 16px;
-    }
-  `;
-  document.head.appendChild(styleElement);
-}
-
-// 페이지에 스타일 추가 (최초 1회)
-addStyles();
+console.log('ClassCard 테스트 도우미 실행 중...');
 
 // 저장된 데이터를 가져오는 함수
 function loadSavedData() {
@@ -57,117 +17,38 @@ function loadSavedData() {
   });
 }
 
-// 단어와 뜻이 일치하는지 확인하는 함수 (최적화된 버전)
+// 단어와 뜻이 일치하는지 확인하는 함수
 function matchWordAndMeaning(word, meaning, savedWords) {
   if (!savedWords || !savedWords.length) return false;
   
-  debugLog(`매칭: "${word}" ↔ "${meaning}"`, 2);
-  
-  // 한국어 문제 패턴 캐싱 (정규식 연산 줄이기)
-  const koreanPattern = /^\[\w+\]\s+(.+)$/;
-  const koreanMatch = word.match(koreanPattern);
-  const cleanWord = koreanMatch ? koreanMatch[1] : word;
-  
-  // 빠른 정규화
-  const normWord = fastNormalize(cleanWord);
-  const normMeaning = fastNormalize(meaning);
-  
-  // 캐싱된 정규화 텍스트 사용 (동일한 단어 반복 계산 방지)
-  if (!savedWords._normalized) {
-    // 한 번만 정규화하여 저장
-    savedWords._normalized = savedWords.map(word => ({
-      front: fastNormalize(word.front),
-      back: fastNormalize(word.back),
-      original: word
-    }));
-  }
-  
-  // 1. 빠른 정확한 일치 검사 (O(n) 단일 패스)
-  for (const word of savedWords._normalized) {
-    // 정방향 일치 (문제=단어, 선택지=의미) - 완전 일치만 허용
-    if (word.front === normWord && word.back === normMeaning) {
-      return true;
+  // 정확한 일치 검사
+  for (const savedWord of savedWords) {
+    // 단어의 앞면(front)과 뒷면(back)을 모두 검사
+    // 문제의 텍스트가 단어(front)와 일치하는 경우 (뜻을 고르는 문제)
+    if (normalizeText(savedWord.front) === normalizeText(word)) {
+      return normalizeText(savedWord.back) === normalizeText(meaning);
     }
     
-    // 역방향 일치 (문제=의미, 선택지=단어) - 완전 일치만 허용
-    if (word.back === normWord && word.front === normMeaning) {
-      return true;
+    // 문제의 텍스트가 뜻(back)과 일치하는 경우 (단어를 고르는 문제)
+    if (normalizeText(savedWord.back) === normalizeText(word)) {
+      return normalizeText(savedWord.front) === normalizeText(meaning);
     }
-    
-    // 포함 관계는 제거 - 너무 관대한 매칭으로 오답 표시 문제 발생
   }
   
-  // 2. 엄격한 부분 일치 검사 (오답 표시 방지 버전)
-  // 한국어 문제인 경우에만 유사도 검사 수행
-  if (koreanMatch) {
-    // 임계값 상향 조정 (매우 엄격하게)
-    const threshold = 0.85;
+  // 부분 일치 검사 (더 관대한 검사)
+  for (const savedWord of savedWords) {
+    // 앞면이 문제와 비슷한 경우, 선택지가 뒷면과 비슷한지 확인
+    if (isSimilarText(savedWord.front, word)) {
+      return isSimilarText(savedWord.back, meaning);
+    }
     
-    // 최대 점수만 필요하므로 단순화
-    let bestScore = 0;
-    
-    for (const word of savedWords._normalized) {
-      // 유사도 검사 (매우 엄격한 조건)
-      let score = 0;
-      
-      // 정방향 검사 (문제=단어, 선택지=의미)
-      if (exactOrStrongMatch(word.front, normWord)) {
-        score = exactOrStrongMatch(word.back, normMeaning) ? 0.9 : 0;
-      }
-      // 역방향 검사 (문제=의미, 선택지=단어)
-      else if (exactOrStrongMatch(word.back, normWord)) {
-        score = exactOrStrongMatch(word.front, normMeaning) ? 0.9 : 0;
-      }
-      
-      // 점수가 임계값을 넘는 경우에만 정답으로 인정
-      if (score >= threshold) {
-        return true;
-      }
+    // 뒷면이 문제와 비슷한 경우, 선택지가 앞면과 비슷한지 확인
+    if (isSimilarText(savedWord.back, word)) {
+      return isSimilarText(savedWord.front, meaning);
     }
   }
   
   return false;
-}
-
-// 정확한 매칭을 위한 정규화 함수
-function fastNormalize(text) {
-  if (!text) return '';
-  // 기본 정규화 (최소한의 처리)
-  return text.trim().toLowerCase()
-    .replace(/\s+/g, ' ');  // 연속 공백만 제거 (다른 문자는 유지)
-}
-
-// 매우 엄격한 일치 검사 (정확한 일치 또는 매우 높은 유사도만 허용)
-function exactOrStrongMatch(text1, text2) {
-  // 완전히 동일한 경우
-  if (text1 === text2) return true;
-  
-  // 매우 긴 문자열이면 완전 일치만 허용
-  if (text1.length > 20 || text2.length > 20) {
-    // 긴 문자열은 완전 일치가 아니면 false
-    return false;
-  }
-  
-  // 한쪽이 다른쪽을 완전히 포함하는 경우
-  // 예: "geographical position" vs "geographical"
-  if (text1.length > text2.length && text1.includes(text2)) {
-    // 짧은 텍스트가 긴 텍스트의 60% 이상을 차지하는 경우에만 true
-    return text2.length / text1.length > 0.6;
-  }
-  
-  if (text2.length > text1.length && text2.includes(text1)) {
-    // 짧은 텍스트가 긴 텍스트의 60% 이상을 차지하는 경우에만 true
-    return text1.length / text2.length > 0.6;
-  }
-  
-  // 둘 다 아닌 경우 매칭 실패로 간주
-  return false;
-}
-
-// 더 이상 사용하지 않는 유사도 확인 함수 (참조용으로만 유지)
-function quickSimilarityCheck(text1, text2) {
-  // 완전 일치만 허용 (모든 유사도 검사 비활성화)
-  return text1 === text2;
 }
 
 // 텍스트 정규화 (공백, 특수문자 등 처리)
@@ -210,223 +91,424 @@ function isSimilarText(text1, text2) {
   return commonWordCount >= threshold;
 }
 
-// 메인 함수: ClassCard 테스트 페이지에서 정답 표시 (성능 최적화 버전)
-let savedWordData = null; // 단어 데이터 캐싱
-
-async function highlightAnswers() {
-  // 캐시된 데이터가 없으면 데이터 가져오기
-  if (!savedWordData) {
-    savedWordData = await loadSavedData();
-    
-    if (!savedWordData || !savedWordData.words || savedWordData.words.length === 0) {
-      debugLog("사용 가능한 단어 데이터가 없습니다.");
-      
-      // 사용자에게 간단히 알림
-      const notification = document.createElement('div');
-      notification.textContent = '단어 데이터가 없습니다. 먼저 단어장 페이지를 방문하세요.';
-      notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: orange; color: white; padding: 10px; border-radius: 5px; z-index: 10000;';
-      document.body.appendChild(notification);
-      
-      setTimeout(() => notification.remove(), 3000);
-      return;
-    }
-    
-    debugLog(`${savedWordData.words.length}개 단어 로드됨`);
+// 디버그 함수 - 선택지 요소의 정보 출력
+function debugElement(element) {
+  console.group('요소 디버그 정보');
+  try {
+    console.log('요소:', element);
+    console.log('HTML:', element.outerHTML);
+    console.log('클래스:', element.className);
+    console.log('ID:', element.id);
+    console.log('현재 스타일:', window.getComputedStyle(element));
+    console.log('인라인 스타일:', element.style.cssText);
+    console.log('부모 요소:', element.parentElement);
+  } catch (error) {
+    console.error('디버그 중 오류:', error);
   }
+  console.groupEnd();
+}
+
+// 특정 선택자의 요소를 찾고 디버그하는 함수
+function findAndDebugElements(selector) {
+  console.group(`선택자 "${selector}" 디버그`);
+  const elements = document.querySelectorAll(selector);
+  console.log(`${elements.length}개 요소 찾음`);
   
-  // 이미 표시된 정답이 있는지 확인 (불필요한 재처리 방지)
-  const existingAnswers = document.querySelectorAll('.cc-correct-answer');
-  if (existingAnswers.length > 0) {
-    debugLog(`이미 ${existingAnswers.length}개의 정답이 표시되어 있습니다.`, 2);
+  elements.forEach((el, index) => {
+    console.log(`요소 ${index + 1}:`, el);
+  });
+  console.groupEnd();
+}
+
+// 메인 함수: ClassCard 테스트 페이지에서 정답 표시
+async function highlightAnswers() {
+  console.group('정답 강조 표시 실행');
+  
+  // 페이지 구조 디버그
+  console.log('페이지 구조 분석:');
+  findAndDebugElements('.flip-card');
+  findAndDebugElements('.cc-radio-box');
+  
+  // CSS 스타일 추가 (전역 스타일)
+  injectGlobalStyles();
+  
+  // 저장된 단어 데이터 가져오기
+  const savedData = await loadSavedData();
+  
+  if (!savedData || !savedData.words || savedData.words.length === 0) {
+    console.log("사용 가능한 단어 데이터가 없습니다. 먼저 단어장 페이지를 방문해주세요.");
+    
+    // 사용자에게 알림
+    const notification = document.createElement('div');
+    notification.textContent = '단어 데이터가 없습니다. 먼저 ClassCard 단어장 페이지를 방문해주세요.';
+    notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: orange; color: white; padding: 10px; border-radius: 5px; z-index: 10000; font-weight: bold;';
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.remove();
+    }, 5000);
+    
     return;
   }
   
-  // DOM 쿼리 최소화 (한 번만 쿼리)
-  const flipCards = document.querySelectorAll(".flip-card");
+  console.log(`단어장 "${savedData.setName}"에서 ${savedData.words.length}개 단어 로드됨`);
+  
+  // 문제 카드 요소들 가져오기
+  const flipCards = Array.from(document.getElementsByClassName("flip-card"));
   
   if (flipCards.length === 0) {
-    debugLog("문제 카드를 찾을 수 없습니다.");
+    console.log("문제 카드를 찾을 수 없습니다.");
     return;
   }
   
-  debugLog(`${flipCards.length}개의 문제 카드 발견`);
+  console.log(`${flipCards.length}개의 문제 카드 찾음`);
   let matchCount = 0;
-  let processedStart = performance.now();
   
-  // 각 문제 카드 처리 (최적화된 버전)
-  for (let i = 0; i < flipCards.length; i++) {
-    const card = flipCards[i];
-    
+  // 각 문제 카드 처리
+  flipCards.forEach((card) => {
     // 문제 텍스트 (앞면)
-    const questionElement = card.querySelector(".flip-card-front .front-hidden");
-    if (!questionElement) continue;
+    const questionElement = card.getElementsByClassName("flip-card-front")[0]?.getElementsByClassName("front-hidden")[0];
+    if (!questionElement) return;
     
     const questionText = questionElement.innerText.trim();
     
-    // 선택지 목록 (DOM 쿼리 최소화)
-    const optionsBox = card.querySelector(".cc-radio-box-body");
-    if (!optionsBox) continue;
+    // 선택지 목록
+    const optionsBox = card.getElementsByClassName("cc-radio-box-body")[0];
+    if (!optionsBox) return;
     
-    const options = optionsBox.querySelectorAll(".cc-radio-box");
-    debugLog(`문제: "${questionText}" (${options.length}개 선택지)`, 2);
+    const options = Array.from(optionsBox.getElementsByClassName("cc-radio-box"));
     
-    // 각 선택지 처리 (안전하게 수정된 버전)
-    // 정답 후보 찾기 (점수와 함께)
-    let bestOption = null;
-    let bestScore = 0;
-    let correctAnswers = [];
+    console.log(`문제: "${questionText}"`);
+    console.log(`선택지 개수: ${options.length}`);
     
-    for (let j = 0; j < options.length; j++) {
-      const option = options[j];
+    // 각 선택지 처리
+    options.forEach((option) => {
       const optionText = option.innerText.trim();
       
-      // 이미 처리된 요소면 건너뛰기
-      if (option.classList.contains('cc-correct-answer') || option.dataset.processed) {
-        continue;
-      }
+      // 단어 데이터와 비교하여 정답인지 확인
+      const isCorrect = matchWordAndMeaning(questionText, optionText, savedData.words);
       
-      try {
-        // 정답인지 확인 (엄격한 검사)
-        const isCorrect = matchWordAndMeaning(questionText, optionText, savedWordData.words);
+      if (isCorrect) {
+        console.log(`정답 발견: "${optionText}"`);
+        console.log('정답 선택지 DOM:', option);
         
-        if (isCorrect) {
-          correctAnswers.push({
-            option: option,
-            text: optionText
-          });
+        try {
+          // 여러 방식으로 정답 표시
+          markAsCorrectAnswer(option);
+          matchCount++;
+        } catch (error) {
+          console.error('정답 스타일 적용 중 오류 발생:', error);
+          
+          // 오류 발생 시 대체 방법 시도
+          try {
+            // 가장 기본적인 방법 적용
+            option.style.backgroundColor = '#e6f7e6';
+            option.setAttribute('data-cc-correct-answer', 'true');
+            console.log('대체 방법으로 스타일 적용');
+          } catch (fallbackError) {
+            console.error('대체 방법도 실패:', fallbackError);
+          }
         }
-      } catch (err) {
-        debugLog(`오류 발생: ${err.message}`, 1);
+      }
+    });
+  });
+  
+  // 모든 정답 스타일 강제 적용
+  applyDirectStyles();
+  
+  // 선택지 클릭 이벤트 추가
+  setupOptionClickEvents();
+  
+  // 모든 cc-radio-box 요소의 현재 상태 출력
+    });
+  });
+  
+  // 강제 DOM 요소 디버깅
+  console.log('모든 cc-radio-box 요소의 현재 상태:');
+  const allOptions = document.querySelectorAll('.cc-radio-box');
+  allOptions.forEach((opt, idx) => {
+    console.log(`옵션 ${idx+1} 스타일:`, window.getComputedStyle(opt).backgroundColor);
+  });
+  
+  // 정답 표시 결과 로깅
+  if (matchCount > 0) {
+    console.log(`총 ${matchCount}개의 정답을 표시했습니다.`);
+  } else {
+    console.warn('일치하는 정답을 찾지 못했습니다.');
+  }
+  
+  // 일치하지 않는 단어 목록 출력 (디버깅용)
+  const questionTexts = Array.from(document.querySelectorAll('.front-hidden')).map(el => el.innerText.trim());
+  console.log('현재 문제 목록:', questionTexts);
+  console.log('저장된 단어 목록:', savedData.words.map(w => `${w.front} - ${w.back}`));
+  
+  // 사용자에게 알림
+  const notificationColor = matchCount > 0 ? '#28a745' : '#ffc107';
+  const notificationText = matchCount > 0 
+    ? `${matchCount}개의 정답을 표시했습니다.` 
+    : '일치하는 정답을 찾지 못했습니다. 단어장 데이터를 확인해주세요.';
+  
+  const notification = document.createElement('div');
+  notification.textContent = notificationText;
+  notification.style.cssText = `position: fixed; top: 20px; right: 20px; background-color: ${notificationColor}; color: white; padding: 10px; border-radius: 5px; z-index: 10000; font-weight: bold;`;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.remove();
+  }, 5000);
+  
+  // 디버그 그룹 종료
+  console.groupEnd();
+}
+
+// 클래스카드의 선택지 클릭 이벤트 재정의
+function interceptClassCardClicks() {
+  // 전체 문서에 클릭 이벤트 리스너 추가 (이벤트 캡처링 사용)
+  document.addEventListener('click', function(e) {
+    // 클릭된 요소 또는 부모가 cc-radio-box 클래스를 가지고 있는지 확인
+    let radioBox = e.target.closest('.cc-radio-box');
+    if (radioBox) {
+      // 정답 선택지인 경우 다시 강조 표시
+      if (radioBox.hasAttribute('data-cc-correct-answer') || radioBox.classList.contains('cc-answer-highlight')) {
+        console.log('정답 선택지 클릭 감지, 스타일 재적용');
+        
+        // 기본 이벤트는 그대로 진행되도록 함 (선택지를 선택할 수 있게)
+        
+        // 약간의 지연 후 스타일 재적용
+        setTimeout(() => {
+          applyDirectStyles();
+        }, 100);
       }
     }
-    
-    // 각 문제에 대해 정답이 하나만 있어야 함 (안전장치)
-    // 복수의 정답이 감지되면 아무것도 표시하지 않음
-    if (correctAnswers.length === 1) {
-      const correctOption = correctAnswers[0].option;
-      correctOption.classList.add('cc-correct-answer');
-      correctOption.dataset.processed = "true"; // 처리 완료 표시
-      matchCount++;
-      debugLog(`정답 표시: "${correctAnswers[0].text}"`, 1);
-    } else if (correctAnswers.length > 1) {
-      debugLog(`경고: "${questionText}" 문제에 대해 여러 정답 후보 감지됨 (${correctAnswers.length}개) - 표시하지 않음`, 1);
+  }, true);
+  
+  console.log('클래스카드 클릭 이벤트 인터셉터 설정 완료');
+}
+
+// 문제 카드가 변경될 때 정답 강조 표시를 다시 실행
+function setupCardChangeMonitoring() {
+  // 이전 문제와 현재 문제 상태 추적
+  let currentQuestion = '';
+  
+  // 문제 변경 감지 함수
+  function checkQuestionChange() {
+    const visibleCards = Array.from(document.querySelectorAll('.flip-card.showing'));
+    if (visibleCards.length > 0) {
+      const questionElement = visibleCards[0].querySelector('.front-hidden');
+      if (questionElement) {
+        const newQuestion = questionElement.innerText.trim();
+        if (newQuestion !== currentQuestion) {
+          console.log(`문제 변경 감지: "${currentQuestion}" -> "${newQuestion}"`);
+          currentQuestion = newQuestion;
+          highlightAnswers();
+        }
+      }
     }
   }
   
-  // 처리 시간 로깅
-  const processTime = performance.now() - processedStart;
-  debugLog(`처리 시간: ${processTime.toFixed(1)}ms, ${matchCount}개 정답 발견`);
+  // 주기적으로 문제 변경 확인
+  setInterval(checkQuestionChange, 300);
   
-  // 정답이 있을 경우만 알림 표시
-  if (matchCount > 0) {
-    // 간단한 알림
-    const notification = document.createElement('div');
-    notification.textContent = `${matchCount}개의 정답을 표시했습니다.`;
-    notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: #28a745; color: white; padding: 8px; border-radius: 4px; z-index: 10000;';
-    document.body.appendChild(notification);
+  // 페이지 변경 감시 (새로운 문제 카드 추가)
+  let observer = new MutationObserver((mutations) => {
+    let shouldHighlight = false;
     
-    setTimeout(() => notification.remove(), 2000);
-  }
-}
-
-// 스크립트 실행
-highlightAnswers();
-
-// 디버그 정보 함수 (필요할 때만 사용)
-function debugLayout() {
-  if (DEBUG_LEVEL < 2) return; // 상세 디버깅이 비활성화된 경우 실행 안 함
-  
-  debugLog("--- 레이아웃 분석 ---");
-  const flipCards = document.querySelectorAll('.flip-card');
-  debugLog(`문제 카드: ${flipCards.length}개`);
-}
-
-// 최적화된 문제 카드 변경 감지 함수
-let lastDetectedChange = 0; // 마지막 변경 감지 시간
-let updateTimerId = null; // 타이머 ID 저장 (중복 실행 방지)
-
-function detectCardChanges() {
-  debugLog("변경 감지 시작");
-  
-  // DOM 변경 감지를 위한 MutationObserver
-  const observer = new MutationObserver((mutations) => {
-    // 스로틀링 - 너무 잦은 업데이트 방지
-    const now = Date.now();
-    if (now - lastDetectedChange < 500) {
-      return; // 0.5초 내에 다시 호출되면 무시
-    }
-    
-    // 관련 변경인지 빠르게 확인
-    let relevantChange = false;
-    
-    // 모든 변경을 검사하지 않고 일부만 샘플링
-    const samplingLimit = Math.min(mutations.length, 5);
-    
-    for (let i = 0; i < samplingLimit; i++) {
-      const mutation = mutations[i];
-      
-      // 클래스카드의 주요 이벤트는 클래스와 콘텐츠 변경
+    for (const mutation of mutations) {
+      // 노드 추가 또는 속성 변경 감지
       if (
-        (mutation.type === 'attributes' && mutation.attributeName === 'class') ||
-        (mutation.type === 'childList' && mutation.addedNodes.length > 0)
+        (mutation.type === 'childList' && mutation.addedNodes.length > 0) ||
+        (mutation.type === 'attributes' && 
+         mutation.target.classList && 
+         (mutation.target.classList.contains('flip-card') || 
+          mutation.target.classList.contains('cc-radio-box')))
       ) {
-        relevantChange = true;
+        shouldHighlight = true;
         break;
       }
     }
     
-    // 관련 변경이 감지된 경우
-    if (relevantChange) {
-      lastDetectedChange = now;
-      
-      // 중복 실행 방지
-      if (updateTimerId) clearTimeout(updateTimerId);
-      
-      // 지연 실행 (DOM이 완전히 업데이트된 후 실행)
-      updateTimerId = setTimeout(() => {
+    if (shouldHighlight) {
+      console.log("DOM 변경 감지됨, 정답 다시 표시합니다.");
+      // 약간의 지연 후 강조 표시 실행 (DOM이 완전히 업데이트될 시간 제공)
+      setTimeout(() => {
         highlightAnswers();
-        updateTimerId = null;
-      }, 300);
+      }, 100);
     }
   });
-
-  // 성능을 위해 감시 옵션 최적화
+  
+  // DOM 트리 및 속성 변화 감시 설정
   observer.observe(document.body, {
-    childList: true,     // 요소 추가/제거 감시
-    subtree: true,       // 하위 요소도 감시
-    attributes: true,    // 속성 변경 감시
-    attributeFilter: ['class'], // 클래스 변경만 감시
-    characterData: false // 텍스트 변경은 무시
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style']
   });
   
-  // 클래스카드 특화 이벤트 (필수만 유지)
-  try {
-    // 페이지 이동을 감지하기 위해 hashchange 이벤트 사용
-    window.addEventListener('hashchange', () => {
-      debugLog("URL 해시 변경 감지됨");
-      
-      if (updateTimerId) clearTimeout(updateTimerId);
-      updateTimerId = setTimeout(highlightAnswers, 500);
-    });
+  console.log('카드 변경 모니터링 설정 완료');
+}
+
+// 스크립트 실행
+(function initializeTestHelper() {
+  console.log('ClassCard 테스트 도우미 초기화 시작...');
+  
+  // 정답 강조 표시 실행
+  highlightAnswers();
+  
+  // 이벤트 인터셉터 설정
+  interceptClassCardClicks();
+  
+  // 카드 변경 모니터링 설정
+  setupCardChangeMonitoring();
+  
+  // 일정 시간마다 강제로 다시 실행 (안전장치)
+  setInterval(() => {
+    console.log('주기적 정답 강조 표시 실행 (백업)');
+    highlightAnswers();
+  }, 3000);
+  
+  console.log('ClassCard 테스트 도우미 초기화 완료!');
+})();
+
+// 전역 CSS 스타일 주입 함수
+function injectGlobalStyles() {
+  // 이미 스타일이 존재하면 업데이트
+  let styleElement = document.getElementById('cc-helper-styles');
+  if (!styleElement) {
+    styleElement = document.createElement('style');
+    styleElement.id = 'cc-helper-styles';
+    document.head.appendChild(styleElement);
+  }
+  
+  // !important를 사용하여 원래 CSS를 덮어쓰기
+  styleElement.textContent = `
+    /* 정답 선택지 강조 스타일 - 최대한 강력한 선택자 사용 */
+    html body .cc-radio-box[data-cc-correct-answer="true"],
+    html body .cc-answer-highlight,
+    html body .cc-radio-box.cc-answer-highlight {
+      background-color: #e6f7e6 !important;
+      background: linear-gradient(to right, #e6f7e6, #e6f7e6) !important;
+      border: 2px solid #28a745 !important;
+      box-shadow: 0 0 5px rgba(40, 167, 69, 0.5) !important;
+      position: relative !important;
+      z-index: 1000 !important;
+    }
     
-    // 최적화된 간헐적 확인 (너무 자주 실행하지 않음)
-    setInterval(() => {
-      // 마지막 업데이트가 10초 이상 전이면 다시 확인
-      const now = Date.now();
-      if (now - lastDetectedChange > 10000) {
-        highlightAnswers();
-      }
-    }, 10000);
-  } catch (e) {
-    debugLog("이벤트 감지 오류", e);
+    /* 투명 배경이 아닌 선택지들 - 정답이 아닌 경우 */
+    html body .cc-radio-box:not([data-cc-correct-answer="true"]):not(.cc-answer-highlight) {
+      background-color: transparent !important;
+    }
+    
+    /* 정답 선택지에 체크 표시 추가 */
+    html body .cc-radio-box[data-cc-correct-answer="true"]::before,
+    html body .cc-answer-highlight::before {
+      content: "✓";
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #28a745;
+      font-weight: bold;
+      font-size: 20px;
+      z-index: 99999;
+      pointer-events: none;
+    }
+    
+    /* 정답 배지 스타일 */
+    html body .correct-answer-badge {
+      display: block !important;
+      position: absolute !important;
+      right: 10px !important;
+      top: 50% !important;
+      transform: translateY(-50%) !important;
+      color: #28a745 !important;
+      font-weight: bold !important;
+      font-size: 20px !important;
+      z-index: 99999 !important;
+      pointer-events: none !important;
+      user-select: none !important;
+      text-shadow: 0 0 3px white !important;
+    }
+    
+    /* 각 정답 선택지에 테두리 오버레이 추가 */
+    html body .answer-overlay {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      border: 2px solid #28a745 !important;
+      box-sizing: border-box !important;
+      background-color: rgba(40, 167, 69, 0.1) !important;
+      pointer-events: none !important;
+      z-index: 99998 !important;
+    }
+  `;
+  
+  console.log('전역 스타일 주입 완료');
+  
+  // 직접 DOM 요소에 스타일을 적용
+  applyDirectStyles();
+  
+  // ClassCard의 스타일 변경 탐지 및 재적용을 위한 interval 설정
+  if (!window.answerStyleInterval) {
+    window.answerStyleInterval = setInterval(applyDirectStyles, 500);
+    console.log('스타일 재적용 인터벌 설정됨');
   }
 }
 
-// 페이지 로드 후 최초 1회만 실행
-(function init() {
-  // 정답 표시 최초 실행
+// 직접적인 스타일 적용 함수 (외부에서도 호출 가능)
+function applyDirectStyles() {
+  try {
+    const correctAnswers = document.querySelectorAll('[data-cc-correct-answer="true"]');
+    console.log(`스타일 직접 적용: ${correctAnswers.length}개 요소`);
+    
+    correctAnswers.forEach(element => {
+      // 강제로 인라인 스타일 적용
+      element.setAttribute('style', `
+        background-color: #e6f7e6 !important;
+        background: linear-gradient(to right, #e6f7e6, #e6f7e6) !important;
+        border: 2px solid #28a745 !important;
+        box-shadow: 0 0 5px rgba(40, 167, 69, 0.5) !important;
+        position: relative !important;
+        z-index: 1000 !important;
+      `);
+      
+      // CSS 클래스도 추가 (CSS 선택자로 스타일링하기 위함)
+      if (!element.classList.contains('cc-answer-highlight')) {
+        element.classList.add('cc-answer-highlight');
+      }
+      
+      // 오버레이 요소 추가 (별도의 레이어로 스타일 적용)
+      if (!element.querySelector('.answer-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'answer-overlay';
+        element.appendChild(overlay);
+      }
+      
+      // 정답 표시 배지 추가
+      if (!element.querySelector('.correct-answer-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'correct-answer-badge';
+        badge.textContent = '✓';
+        element.appendChild(badge);
+      }
+      
+      // 클릭 이벤트를 방지하기 위한 추가 처리
+      element.addEventListener('mousedown', stopPropagation, true);
+      element.addEventListener('click', stopPropagation, true);
+    });
+  } catch (e) {
+    console.error('직접 스타일 적용 중 오류:', e);
+  }
+}
+
+// 이벤트 전파 방지 함수
+function stopPropagation(e) {
+  e.stopPropagation();
+}
+
+// 페이지 로드 후 일정 시간 후에 다시 실행 (안전장치)
+setTimeout(() => {
+  console.log('5초 후 다시 실행 - 안전장치');
   highlightAnswers();
-  
-  // 변경 감지 시작
-  detectCardChanges();
-})();
+}, 5000);
