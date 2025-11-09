@@ -2,7 +2,7 @@
 // ClassCard 시험 페이지에서 저장된 단어 데이터로 정답 후보를 하이라이트합니다.
 
 (function () {
-  const HIGHLIGHT_COLOR = '#eeeeee'; 
+  const HIGHLIGHT_COLOR = '#606060'; 
   const OUTLINE_COLOR = '#eab308';
 
   function normalizeText(t) {
@@ -38,7 +38,8 @@
 
   function highlightOptionEl(optionEl) {
     if (!optionEl || optionEl.dataset.ccpHighlighted === '1') return;
-    optionEl.style.backgroundColor = HIGHLIGHT_COLOR;
+    // optionEl.style.color = HIGHLIGHT_COLOR;
+    optionEl.style.backgroundColor = '#fbfbfb';
   }
 
   function processOnce(maps) {
@@ -50,9 +51,10 @@
       if (!nq) return;
 
       console.log(`질문: ${nq}`);
+      console.log('맵 상태:', maps);
 
       // 이 카드의 보기들
-      const optionEls = card.querySelectorAll('.cc-radio-box-body .cc-radio-box');
+      const optionEls = card.querySelectorAll('.cc-radio-box-body');
       if (!optionEls.length) return;
 
       // 질문이 front(단어)인 경우: 정답은 back(뜻)
@@ -63,21 +65,29 @@
       console.log(`예상 정답 (Back): ${Array.from(expectedBacks || []).join(', ')}`);
       console.log(`예상 정답 (Front): ${Array.from(expectedFronts || []).join(', ')}`);
 
+      // 예상 정답이 없다면
+      if ((!expectedBacks || expectedBacks.size === 0) && (!expectedFronts || expectedFronts.size === 0)) {
+        console.log(`예상 정답이 없습니다: ${nq}`);
+        return;
+      }
+
       var isHighlighted = false;
 
-      optionEls.forEach((opt) => {
-        const optTextRaw = opt.innerText || '';
-        const no = normalizeText(optTextRaw);
-        if (!no) return;
+      // optionEls is a NodeList; iterate its elements and query all label elements inside each one
+      Array.from(optionEls).forEach((optContainer) => {
+        Array.from(optContainer.querySelectorAll('label')).forEach((labelEl) => {
+          const optTextRaw = labelEl.innerText || '';
+          const no = normalizeText(optTextRaw);
+          if (!no) return;
 
-        console.log(`보기: ${no}`);
+          console.log(`보기: ${no}`);
 
-        if ((expectedBacks && expectedBacks.has(no)) || (expectedFronts && expectedFronts.has(no))) {
-          highlightOptionEl(opt);
-          isHighlighted = true;
-          console.log(`정답 후보 하이라이트: ${no}`);
-        }
-
+          if ((expectedBacks && expectedBacks.has(no)) || (expectedFronts && expectedFronts.has(no))) {
+            highlightOptionEl(labelEl);
+            isHighlighted = true;
+            console.log(`정답 후보 하이라이트: ${no}`);
+          }
+        });
       });
 
       if (!isHighlighted) {

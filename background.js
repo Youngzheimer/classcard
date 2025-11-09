@@ -50,7 +50,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           target: { tabId: sender.tab.id },
           func: (wordCount) => {
             const notification = document.createElement('div');
-            notification.textContent = `${wordCount}개의 단어가 성공적으로 저장되었습니다!`;
             notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: green; color: white; padding: 10px; border-radius: 5px; z-index: 10000; font-weight: bold;';
             document.body.appendChild(notification);
             
